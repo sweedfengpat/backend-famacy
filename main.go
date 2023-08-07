@@ -48,13 +48,16 @@ type Product struct {
 	productPrice       int    `json: "productPrice"`
 	productAmount      int    `json: "productAmount"`
 }
-
 type Register struct {
-	FirstName string `json: "firstname"`
-	LastName  string `json: "lastname"`
-	Email     string `json: "email"`
-	Password  string `json: "password"`
-	Token     string `json: "token"`
+	FirstName   string `json: "firstname"`
+	LastName    string `json: "lastname"`
+	Email       string `json: "email"`
+	Password    string `json: "password"`
+	Token       string `json: "token"`
+	Tel         string `json: "tel"`
+	Personal_id string `json: "personal_id"`
+	Brithday    string `json: "brithday"`
+	Gender      string `json: "gender"`
 }
 
 type UpdateProfile struct {
@@ -127,10 +130,17 @@ type addressGet struct {
 	address string `json: "address"`
 }
 
+type addressAdd struct {
+	Name     string `json: "name"`
+	Address  string `json: "address"`
+	Email    string `json: "email"`
+	Password string `json: "password"`
+}
+
 func postRegister(context *gin.Context) {
 	db, err := sql.Open("mysql", "root:root@tcp(127.0.0.1:3306)/gostoredb")
 	if err != nil {
-		panic(err.Error())
+		panic("Failed to connect to the database: " + err.Error())
 	}
 	defer db.Close()
 
@@ -138,11 +148,14 @@ func postRegister(context *gin.Context) {
 	if err := context.BindJSON(&newRegister); err != nil {
 		return
 	}
-	insert, err := db.Query("INSERT INTO users (firstName, lastName, email, password, token) VALUES(?, ?, ?, ?, ?)", newRegister.FirstName, newRegister.LastName, newRegister.Email, newRegister.Password, newRegister.Token)
+	fmt.Println("newRegister: ", newRegister)
+	insert, err := db.Query("INSERT INTO users (firstName, lastName, email, password, token, Tel, personal_id, brithday, gender) VALUES(?, ?, ?, ?, ?, ?, ?, ?, ?)", newRegister.FirstName, newRegister.LastName, newRegister.Email, newRegister.Password, newRegister.Token, newRegister.Tel, newRegister.Personal_id, newRegister.Brithday, newRegister.Gender)
 	if err != nil {
+		fmt.Println("Error during insertion:", err)
 		context.IndentedJSON(http.StatusCreated, gin.H{
 			"code": 500,
 		})
+		return
 	}
 	defer insert.Close()
 	fmt.Println("values added!")
@@ -186,23 +199,30 @@ func postLogin(context *gin.Context) {
 	}
 	defer db.Close()
 
+	// Get the request body
 	var user Login
 	var newLogin Login
 	if err := context.BindJSON(&newLogin); err != nil {
-		return
-	}
-
-	fmt.Println(newLogin.Email)
-
-	err = db.QueryRow("SELECT email, password, token FROM users where email = ? AND password = ?", newLogin.Email, newLogin.Password).Scan(&user.Email, &user.Password, &user.Token)
-	if err != nil {
 		context.IndentedJSON(http.StatusCreated, gin.H{
 			"code": 500,
 		})
+		return
+	}
+
+	// Query the database
+	err = db.QueryRow("SELECT email, password, token FROM users where email = ? AND password = ?", newLogin.Email, newLogin.Password).Scan(&user.Email, &user.Password, &user.Token)
+	if err != nil {
+		// Return an error if the user didn't exist
+		context.IndentedJSON(http.StatusCreated, gin.H{
+			"code": 500,
+		})
+		return
 	} else {
+		// Return a success code if the user was found
 		context.IndentedJSON(http.StatusCreated, gin.H{
 			"code": 200,
 		})
+		return
 	}
 }
 
@@ -319,25 +339,62 @@ func AddCategory(context *gin.Context) {
 
 }
 
+// AddAddress Adds a new address to the database
 func AddAddress(context *gin.Context) {
+	// Establish a connection to the database
 	db, err := sql.Open("mysql", conn)
 	if err != nil {
 		panic(err.Error())
 	}
 	defer db.Close()
 
-	insert, err := db.Query("INSERT INTO address (name, address, email, password) VALUES (?, ?, ?, ?)", context.Request.FormValue("name"), context.Request.FormValue("address"), context.Request.FormValue("email"), context.Request.FormValue("password"))
+	var addressAdd addressAdd
+	if err := context.BindJSON(&addressAdd); err != nil {
+		return
+	}
+	fmt.Println("addressAdd: ", addressAdd)
+
+	// Insert a new row into the database
+	insert, err := db.Query("INSERT INTO address (name, address, email, password) VALUES (?, ?, ?, ?)", addressAdd.Name, addressAdd.Address, addressAdd.Email, addressAdd.Password)
 	if err != nil {
 		context.IndentedJSON(http.StatusCreated, gin.H{
-			"code": 500,
+			"code":    500,
+			"message": "INSERT Address fail ",
 		})
 		fmt.Println(err.Error())
 	}
 	defer insert.Close()
 	fmt.Println("values added!")
 
+	//get address id
+	var addressGet addressGet
+	err = db.QueryRow("SELECT id, name, address FROM address WHERE email = ? AND password = ?", addressAdd.Email, addressAdd.Password).Scan(&addressGet.id, &addressGet.name, &addressGet.address)
+	if err != nil {
+		context.IndentedJSON(http.StatusCreated, gin.H{
+			"code":    500,
+			"message": "SELECT Address fail ",
+		})
+		fmt.Println(err.Error())
+	}
+
+	//update address a new row into the database User
+	update, err := db.Query("UPDATE users SET address=? WHERE email = ?", addressGet.id, addressAdd.Email)
+	if err != nil {
+		context.IndentedJSON(http.StatusCreated, gin.H{
+			"code":    500,
+			"message": "UPDATE Address fail ",
+		})
+		fmt.Println(err.Error())
+	}
+	defer update.Close()
+	fmt.Println("values added!")
+
+	// Return a success message
 	context.IndentedJSON(http.StatusCreated, gin.H{
-		"code": 200,
+		"code":    200,
+		"id":      addressGet.id,
+		"name":    addressGet.name,
+		"address": addressGet.address,
 	})
 
 }
