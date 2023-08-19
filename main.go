@@ -221,6 +221,8 @@ func postLogin(context *gin.Context) {
 		// Return a success code if the user was found
 		context.IndentedJSON(http.StatusCreated, gin.H{
 			"code": 200,
+			"user": user,
+
 		})
 		return
 	}
